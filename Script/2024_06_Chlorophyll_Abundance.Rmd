@@ -1,0 +1,78 @@
+---
+title: "2024_06_Chlorophyll_Abundance"
+author: "Cindy Fajardo"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.path = "../Output/")
+```
+
+#Libraries
+```{r, Libraries}
+library("rerddap")
+library(tidyverse)
+library("tidync")
+library("doParallel")
+library(lubridate)
+library(patchwork)
+library(viridis)
+library(here)
+library(kableExtra)
+library(hrbrthemes)
+library(emmeans)
+library(agricolae)
+library(vegan)
+library(performance)
+library(broom)
+library(car)
+library(lme4)
+library(lmerTest)
+library(pscl)
+library(ggridges)
+library(devtools)
+library(pairwiseAdonis)
+```
+
+#Read in CSV
+```{r, Read in CSV}
+spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet.csv"))
+```
+
+#Spectophotometry Data Manipulation
+```{r, Spectophotometry Data Manipulation}
+chl_abun <- spec_chl_abun %>%
+  separate(col = Plate_ID,
+           into = c("Plate", "ID"),
+           sep = "_") %>% 
+  group_by(Plate) %>% 
+  summarise(mean_665 = mean(Abun_665),
+            mean_750 = mean(Abun_750),
+            mean_weight_1 = mean(Weight_1_g),
+            mean_weight_2 = mean(Weight_2_g),
+            mean_meth_weight = mean(Metha_weight),
+            mean_SA = mean(SA_cm_2),
+            mean_PL = mean(Path_lenght_mm)) %>% 
+  mutate(A_net = (mean_665-mean_750),
+         Vol_diff = (mean_weight_2-mean_weight_1),
+         Vol_fin = (Vol_diff/mean_meth_weight)) %>% 
+  mutate(Chl_conc = ((13*A_net*Vol_fin)/(mean_PL*mean_SA)))
+```
+
+#Chl Concentration Boxplot
+```{r, Chl Concentration Boxplot}
+chl_conc_boxplot <-chl_abun %>% 
+  ggplot(aes(x=Plate,
+         y = Chl_conc,
+         fill = Plate))+
+  geom_boxplot()+
+  labs(title = "Chlorophyll Concentration",
+       fill = "Plate",
+       x = "Plate ID")
+chl_conc_boxplot
+```
+
