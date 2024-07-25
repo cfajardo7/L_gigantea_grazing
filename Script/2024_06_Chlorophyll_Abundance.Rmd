@@ -66,7 +66,7 @@ chl_abun <- spec_chl_abun %>%
   select(Plate, Chl_conc) %>% 
   mutate(Plate_Type = case_when(
     Plate %in% c("C1","C2","C3","C4") ~ "Control",
-    Plate %in% c("F1","F2","F3","F4","F6","F7","F8","F10","UKFem") ~ "Female",
+    Plate %in% c("F1","F2","F3","F4","F6","F7","F8","F10","F5") ~ "Female",
     Plate %in% c("M1","M2","M3","M4","M5","M6","M8","M9","M10") ~ "Male",
     Plate %in% ("UK") ~ "Unknown"))
   
