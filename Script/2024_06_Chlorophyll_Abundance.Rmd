@@ -36,6 +36,8 @@ library(pscl)
 library(ggridges)
 library(devtools)
 library(pairwiseAdonis)
+library(gcookbook)
+library(ggsci)
 ```
 
 #Read in CSV
@@ -60,19 +62,30 @@ chl_abun <- spec_chl_abun %>%
   mutate(A_net = (mean_665-mean_750),
          Vol_diff = (mean_weight_2-mean_weight_1),
          Vol_fin = (Vol_diff/mean_meth_weight)) %>% 
-  mutate(Chl_conc = ((13*A_net*Vol_fin)/(mean_PL*mean_SA)))
+  mutate(Chl_conc = ((13*A_net*Vol_fin)/(mean_PL*mean_SA))) %>% 
+  select(Plate, Chl_conc) %>% 
+  mutate(Plate_Type = case_when(
+    Plate %in% c("C1","C2","C3","C4") ~ "Control",
+    Plate %in% c("F1","F2","F3","F4","F6","F7","F8","F10","UKFem") ~ "Female",
+    Plate %in% c("M1","M2","M3","M4","M5","M6","M8","M9","M10") ~ "Male",
+    Plate %in% ("UK") ~ "Unknown"))
+  
 ```
 
 #Chl Concentration Boxplot
 ```{r, Chl Concentration Boxplot}
 chl_conc_boxplot <-chl_abun %>% 
-  ggplot(aes(x=Plate,
+  ggplot(aes(x=Plate_Type,
          y = Chl_conc,
-         fill = Plate))+
-  geom_boxplot()+
+         fill = Plate_Type))+
+  geom_boxplot(show.legend = FALSE)+
   labs(title = "Chlorophyll Concentration",
-       fill = "Plate",
-       x = "Plate ID")
+       fill = "Plate_Type",
+       x = "Plate Type",
+       y = "Chlorophyll Concentration μg/mm²")+
+  scale_fill_bmj()+
+  theme_bw()
+  
 chl_conc_boxplot
 ```
 
