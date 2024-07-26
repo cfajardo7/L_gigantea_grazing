@@ -38,6 +38,7 @@ library(devtools)
 library(pairwiseAdonis)
 library(gcookbook)
 library(ggsci)
+library(Hmisc)
 ```
 
 #Read in CSV
@@ -87,5 +88,64 @@ chl_conc_boxplot <-chl_abun %>%
   theme_bw()
   
 chl_conc_boxplot
+```
+
+#Only Females and Males
+```{r, Only Females and Males}
+only_fem_male <- spec_chl_abun %>%
+  separate(col = Plate_ID,
+           into = c("Plate", "ID"),
+           sep = "_") %>% 
+  group_by(Plate) %>% 
+  summarise(mean_665 = mean(Abun_665),
+            mean_750 = mean(Abun_750),
+            mean_weight_1 = mean(Weight_1_g),
+            mean_weight_2 = mean(Weight_2_g),
+            mean_meth_weight = mean(Metha_weight),
+            mean_SA = mean(SA_cm_2),
+            mean_PL = mean(Path_lenght_mm)) %>% 
+  mutate(A_net = (mean_665-mean_750),
+         Vol_diff = (mean_weight_2-mean_weight_1),
+         Vol_fin = (Vol_diff/mean_meth_weight)) %>% 
+  mutate(Chl_conc = ((13*A_net*Vol_fin)/(mean_PL*mean_SA))) %>% 
+  select(Plate, Chl_conc) %>%
+  mutate(Plate_Type = case_when(
+    Plate %in% c("C1","C2","C3","C4") ~ "Control",
+    Plate %in% c("F1","F2","F3","F4","F6","F7","F8","F10","F5") ~ "Female",
+    Plate %in% c("M1","M2","M3","M4","M5","M6","M8","M9","M10") ~ "Male",
+    Plate %in% ("UK") ~ "Unknown")) %>% 
+  filter(Plate_Type != "Control") %>% 
+  filter(Plate_Type != "Unknown")
+```
+
+#Paired Graph
+I'm stuck here. I am attempting to have R draw a line to the paired plates, so F1 to M1, F2 to M2, etc but everything I have tried will either draw a line connecting all of the females to each other and males to each other, or will not draw a line at all. The column "Plate" has the names of all of the plates but I don't know how to tell R that there are pairs.I have tried geom_path, geom_segment, stat_summary but to no avail. 
+```{r, Paired Graph}
+paired_graph_1 <- only_fem_male %>% 
+  ggplot(aes(x = Plate_Type, 
+             y = Chl_conc)) +
+  stat_summary(aes(group = Plate), 
+               fun.y = mean, 
+               geom = "path") +
+  stat_summary(aes(color = Plate_Type), 
+               fun.data = mean_cl_boot) +
+  stat_summary(aes(color = Plate_Type), 
+               fun.y = mean, geom = "point", 
+               size = 4) +
+  geom_point(aes(color = Plate_Type), size = 2)
+
+paired_graph_1
+
+paired_graph_2 <- only_fem_male %>% 
+  ggplot(aes(x = Plate_Type,
+             y = Chl_conc)) + 
+  geom_point(aes(color = Plate_Type))+
+  geom_segment(aes(x = Plate,
+                   y = Chl_conc,
+                   xend = Plate,
+                   yend = Chl_conc,
+                   colour = "segment"))
+paired_graph_2
+
 ```
 
