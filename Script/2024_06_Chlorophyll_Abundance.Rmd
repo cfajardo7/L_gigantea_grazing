@@ -44,6 +44,7 @@ library(Hmisc)
 #Read in CSV
 ```{r, Read in CSV}
 spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet.csv"))
+only_fem_male <- read_csv(here("Data", "only_fem_male.csv"))
 ```
 
 #Spectophotometry Data Manipulation
@@ -138,14 +139,22 @@ paired_graph <- only_fem_male %>%
              y = Chl_conc)) +
   stat_summary(aes(group = Group), 
                fun = mean, 
-               geom = "path") +
+               geom = "path",
+               show.legend = FALSE) +
   stat_summary(aes(color = Plate), 
-               fun.data = mean_cl_boot) +
-  stat_summary(aes(color = Plate), 
+               fun.data = mean_cl_boot,
+               show.legend = FALSE) +
+  stat_summary(aes(color = Group), 
                fun = mean, 
                geom = "point", 
-               size = 4) +
-  geom_point(aes(color = Plate))
+               size = 4,
+               show.legend = FALSE) +
+  geom_point(aes(color = Group),
+             show.legend = FALSE)+
+  labs(title = "Chlorophyll Concentartion of Paired Female and Male Cages",
+       x = "Plate Type",
+       y = "Chlorophyll Concentration μg/mm²")+
+  theme_bw()
 
 paired_graph
 
