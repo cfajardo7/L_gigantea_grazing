@@ -115,37 +115,39 @@ only_fem_male <- spec_chl_abun %>%
     Plate %in% c("M1","M2","M3","M4","M5","M6","M8","M9","M10") ~ "Male",
     Plate %in% ("UK") ~ "Unknown")) %>% 
   filter(Plate_Type != "Control") %>% 
-  filter(Plate_Type != "Unknown")
+  filter(Plate_Type != "Unknown") %>% 
+  mutate(Group = case_when(
+    Plate %in% c("F1", "M1") ~ "1",
+    Plate %in% c("F2", "M2") ~ "2",
+    Plate %in% c("F3", "M3") ~ "3",
+    Plate %in% c ("F4", "M4") ~ "4",
+    Plate %in% c("F5", "M5") ~ "5",
+    Plate %in% c("F6", "M6") ~ "6",
+    Plate %in% c("F7") ~"7",
+    Plate %in% c("F8", "M8") ~"8",
+    Plate %in% c("M9") ~ "9",
+    Plate %in% c("F10", "M10") ~"10")) %>% 
+  write.csv(here("Data", "only_fem_male.csv"))
 ```
 
 #Paired Graph
 I'm stuck here. I am attempting to have R draw a line to the paired plates, so F1 to M1, F2 to M2, etc but everything I have tried will either draw a line connecting all of the females to each other and males to each other, or will not draw a line at all. The column "Plate" has the names of all of the plates but I don't know how to tell R that there are pairs.I have tried geom_path, geom_segment, stat_summary but to no avail. 
 ```{r, Paired Graph}
-paired_graph_1 <- only_fem_male %>% 
+paired_graph <- only_fem_male %>% 
   ggplot(aes(x = Plate_Type, 
              y = Chl_conc)) +
-  stat_summary(aes(group = Plate), 
-               fun.y = mean, 
+  stat_summary(aes(group = Group), 
+               fun = mean, 
                geom = "path") +
-  stat_summary(aes(color = Plate_Type), 
+  stat_summary(aes(color = Plate), 
                fun.data = mean_cl_boot) +
-  stat_summary(aes(color = Plate_Type), 
-               fun.y = mean, geom = "point", 
+  stat_summary(aes(color = Plate), 
+               fun = mean, 
+               geom = "point", 
                size = 4) +
-  geom_point(aes(color = Plate_Type), size = 2)
+  geom_point(aes(color = Plate))
 
-paired_graph_1
-
-paired_graph_2 <- only_fem_male %>% 
-  ggplot(aes(x = Plate_Type,
-             y = Chl_conc)) + 
-  geom_point(aes(color = Plate_Type))+
-  geom_segment(aes(x = Plate,
-                   y = Chl_conc,
-                   xend = Plate,
-                   yend = Chl_conc,
-                   colour = "segment"))
-paired_graph_2
+paired_graph
 
 ```
 
