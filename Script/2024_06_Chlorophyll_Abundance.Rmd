@@ -56,10 +56,10 @@ chl_abun <- spec_chl_abun %>%
   group_by(Plate) %>% 
   summarise(mean_665 = mean(Abun_665),
             mean_750 = mean(Abun_750),
-            mean_weight_1 = mean(Weight_1_g),
-            mean_weight_2 = mean(Weight_2_g),
+            mean_weight_1 = mean(Weight_1_ug),
+            mean_weight_2 = mean(Weight_2_ug),
             mean_meth_weight = mean(Metha_weight),
-            mean_SA = mean(SA_cm_2),
+            mean_SA = mean(SA_mm),
             mean_PL = mean(Path_lenght_mm)) %>% 
   mutate(A_net = (mean_665-mean_750),
          Vol_diff = (mean_weight_2-mean_weight_1),
@@ -100,10 +100,10 @@ only_fem_male <- spec_chl_abun %>%
   group_by(Plate) %>% 
   summarise(mean_665 = mean(Abun_665),
             mean_750 = mean(Abun_750),
-            mean_weight_1 = mean(Weight_1_g),
-            mean_weight_2 = mean(Weight_2_g),
+            mean_weight_1 = mean(Weight_1_ug),
+            mean_weight_2 = mean(Weight_2_ug),
             mean_meth_weight = mean(Metha_weight),
-            mean_SA = mean(SA_cm_2),
+            mean_SA = mean(SA_mm),
             mean_PL = mean(Path_lenght_mm)) %>% 
   mutate(A_net = (mean_665-mean_750),
          Vol_diff = (mean_weight_2-mean_weight_1),
