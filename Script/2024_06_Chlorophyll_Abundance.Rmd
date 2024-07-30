@@ -43,29 +43,24 @@ library(Hmisc)
 
 #Read in CSV
 ```{r, Read in CSV}
-spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet.csv"))
-only_fem_male <- read_csv(here("Data", "only_fem_male.csv"))
+orig_spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet_orig.csv"))
+
 ```
 
 #Spectophotometry Data Manipulation
 ```{r, Spectophotometry Data Manipulation}
-chl_abun <- spec_chl_abun %>%
+chl_abun <- orig_spec_chl_abun %>%
   separate(col = Plate_ID,
            into = c("Plate", "ID"),
-           sep = "_") %>% 
-  group_by(Plate) %>% 
-  summarise(mean_665 = mean(Abun_665),
-            mean_750 = mean(Abun_750),
-            mean_weight_1 = mean(Weight_1_ug),
-            mean_weight_2 = mean(Weight_2_ug),
-            mean_meth_weight = mean(Metha_weight),
-            mean_SA = mean(SA_mm),
-            mean_PL = mean(Path_lenght_mm)) %>% 
-  mutate(A_net = (mean_665-mean_750),
-         Vol_diff = (mean_weight_2-mean_weight_1),
-         Vol_fin = (Vol_diff/mean_meth_weight)) %>% 
-  mutate(Chl_conc = ((13*A_net*Vol_fin)/(mean_PL*mean_SA))) %>% 
-  select(Plate, Chl_conc) %>% 
+           sep = "_") %>%
+  mutate(Path_length_cm = Path_lenght_mm/10) %>% 
+  mutate(ug_ml = ((Abun_665-Abun_750)/Path_length_cm),
+         ug = ug_ml *Metha_vol,
+         ug_cm2 = ug/SA_cm_2) %>% 
+  group_by(Plate, Group) %>% 
+  summarise(mean_ug_cm2 = mean(ug_cm2 ),
+            se_ug_cm2 = sd(ug_cm2)/sqrt(n())) %>% 
+  mutate(Group = as.factor(Group))%>% 
   mutate(Plate_Type = case_when(
     Plate %in% c("C1","C2","C3","C4") ~ "Control",
     Plate %in% c("F1","F2","F3","F4","F6","F7","F8","F10","F5") ~ "Female",
@@ -74,42 +69,41 @@ chl_abun <- spec_chl_abun %>%
   
 ```
 
+
 #Chl Concentration Boxplot
 ```{r, Chl Concentration Boxplot}
 chl_conc_boxplot <-chl_abun %>% 
+  filter(Plate_Type != "Unknown") %>% 
   ggplot(aes(x=Plate_Type,
-         y = Chl_conc,
+         y = mean_ug_cm2,
          fill = Plate_Type))+
   geom_boxplot(show.legend = FALSE)+
   labs(title = "Chlorophyll Concentration",
        fill = "Plate_Type",
        x = "Plate Type",
-       y = "Chlorophyll Concentration μg/mm²")+
+       y = "Chlorophyll Concentration μg/cm²")+
   scale_fill_bmj()+
   theme_bw()
   
 chl_conc_boxplot
+
+
 ```
 
 #Only Females and Males
 ```{r, Only Females and Males}
-only_fem_male <- spec_chl_abun %>%
+orig_only_fem_male <- orig_spec_chl_abun %>%
   separate(col = Plate_ID,
            into = c("Plate", "ID"),
-           sep = "_") %>% 
-  group_by(Plate) %>% 
-  summarise(mean_665 = mean(Abun_665),
-            mean_750 = mean(Abun_750),
-            mean_weight_1 = mean(Weight_1_ug),
-            mean_weight_2 = mean(Weight_2_ug),
-            mean_meth_weight = mean(Metha_weight),
-            mean_SA = mean(SA_mm),
-            mean_PL = mean(Path_lenght_mm)) %>% 
-  mutate(A_net = (mean_665-mean_750),
-         Vol_diff = (mean_weight_2-mean_weight_1),
-         Vol_fin = (Vol_diff/mean_meth_weight)) %>% 
-  mutate(Chl_conc = ((13*A_net*Vol_fin)/(mean_PL*mean_SA))) %>% 
-  select(Plate, Chl_conc) %>%
+           sep = "_") %>%
+  mutate(Path_length_cm = Path_lenght_mm/10) %>% 
+  mutate(ug_ml = ((Abun_665-Abun_750)/Path_length_cm),
+         ug = ug_ml *Metha_vol,
+         ug_cm2 = ug/SA_cm_2) %>% 
+  group_by(Plate, Group) %>% 
+  summarise(mean_ug_cm2 = mean(ug_cm2 ),
+            se_ug_cm2 = sd(ug_cm2)/sqrt(n())) %>% 
+  mutate(Group = as.factor(Group)) %>% 
   mutate(Plate_Type = case_when(
     Plate %in% c("C1","C2","C3","C4") ~ "Control",
     Plate %in% c("F1","F2","F3","F4","F6","F7","F8","F10","F5") ~ "Female",
@@ -127,16 +121,14 @@ only_fem_male <- spec_chl_abun %>%
     Plate %in% c("F7") ~"7",
     Plate %in% c("F8", "M8") ~"8",
     Plate %in% c("M9") ~ "9",
-    Plate %in% c("F10", "M10") ~"10")) %>% 
-  write.csv(here("Data", "only_fem_male.csv"))
+    Plate %in% c("F10", "M10") ~"10"))
 ```
 
 #Paired Graph
-I'm stuck here. I am attempting to have R draw a line to the paired plates, so F1 to M1, F2 to M2, etc but everything I have tried will either draw a line connecting all of the females to each other and males to each other, or will not draw a line at all. The column "Plate" has the names of all of the plates but I don't know how to tell R that there are pairs.I have tried geom_path, geom_segment, stat_summary but to no avail. 
 ```{r, Paired Graph}
-paired_graph <- only_fem_male %>% 
+orig_paired_graph <- orig_only_fem_male %>% 
   ggplot(aes(x = Plate_Type, 
-             y = Chl_conc)) +
+             y = mean_ug_cm2)) +
   stat_summary(aes(group = Group), 
                fun = mean, 
                geom = "path",
@@ -156,7 +148,15 @@ paired_graph <- only_fem_male %>%
        y = "Chlorophyll Concentration μg/mm²")+
   theme_bw()
 
-paired_graph
+orig_paired_graph
 
+```
+
+#General Linear Models
+```{r, General Linear Models}
+Mod_chl<-lmer(mean_ug_cm2~Plate_Type+(1|Group), data = orig_only_fem_male %>%
+                filter(Plate_Type %in% c("Male","Female")) ) # you are getting the singularity warning because you have two points without a pair
+anova(Mod_chl)
+summary(Mod_chl)
 ```
 
