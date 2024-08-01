@@ -158,5 +158,8 @@ Mod_chl<-lmer(mean_ug_cm2~Plate_Type+(1|Group), data = orig_only_fem_male %>%
                 filter(Plate_Type %in% c("Male","Female")) ) # you are getting the singularity warning because you have two points without a pair
 anova(Mod_chl)
 summary(Mod_chl)
+
+#post hoc test
+emmeans(Mod_chl, list(pairwise~Plate_Type), adjust = "tukey")
 ```
 
