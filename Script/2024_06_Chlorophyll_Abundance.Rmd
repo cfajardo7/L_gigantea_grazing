@@ -80,7 +80,7 @@ chl_conc_boxplot <-chl_abun %>%
   geom_boxplot(show.legend = FALSE)+
   labs(title = "Chlorophyll Concentration",
        fill = "Plate_Type",
-       x = "Plate Type",
+       x = "Cage Type",
        y = "Chlorophyll Concentration μg/cm²")+
   scale_fill_bmj()+
   theme_bw()
@@ -144,7 +144,7 @@ orig_paired_graph <- orig_only_fem_male %>%
   geom_point(aes(color = Group),
              show.legend = FALSE)+
   labs(title = "Chlorophyll Concentartion of Paired Female and Male Cages",
-       x = "Plate Type",
+       x = "Cage Type",
        y = "Chlorophyll Concentration μg/mm²")+
   theme_bw()
 
