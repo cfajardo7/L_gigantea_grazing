@@ -44,6 +44,7 @@ library(Hmisc)
 #Read in CSV
 ```{r, Read in CSV}
 orig_spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet_orig.csv"))
+master_PAM <- read_csv(here("Data", "2024_Spring_PAM_Master.csv"))
 
 ```
 
@@ -162,4 +163,49 @@ summary(Mod_chl)
 #post hoc test
 emmeans(Mod_chl, list(pairwise~Plate_Type), adjust = "tukey")
 ```
+#PAM Data Manipulation For Plate Type
+```{r, PAM Data Manipulation}
+PAM_average <- master_PAM %>% 
+  group_by(Plate_Type, Group) %>% 
+  summarise(mean_PAM = mean(PAM))
+```
 
+
+#PAM Data Boxplot
+```{r, PAM Data Boxplot}
+PAM_boxplot <- ggplot(PAM_average,
+                      aes(x=Plate_Type,
+                          y=mean_PAM,
+                          fill=Plate_Type))+
+  geom_boxplot(show.legend = FALSE)+
+  labs(title = "Average PAM Readings Per Plate Type",
+       x = "Cage Type",
+       y = "PAM Reading Average")+
+  scale_fill_bmj()+
+  theme_bw()
+PAM_boxplot
+
+```
+
+#PAM Lineplot for Avegarges Per Cage
+```{r, PAM Data Boxplot}
+PAM_ave_per_plate <- master_PAM %>% 
+  group_by(Plate_ID, Group) %>% 
+  summarise(PAM_average = mean(PAM))
+
+Plate_line_plot <- ggplot(PAM_ave_per_plate,
+                      aes(x=Plate_ID,
+                          y=PAM_average,
+                          color = Plate_ID))+
+  geom_point(show.legend = FALSE)+
+  geom_line(color= "black",
+            group=1,
+            show.legend = FALSE)+
+  labs(title = "Average PAM Readings Per Plate",
+       x = "Plate Name",
+       y = "PAM Reading Average")+
+  scale_fill_bmj()+
+  theme_bw()
+Plate_line_plot
+
+```
