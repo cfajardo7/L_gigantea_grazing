@@ -39,6 +39,7 @@ library(pairwiseAdonis)
 library(gcookbook)
 library(ggsci)
 library(Hmisc)
+library(ggpubr)
 ```
 
 #Read in CSV
@@ -167,7 +168,7 @@ emmeans(Mod_chl, list(pairwise~Plate_Type), adjust = "tukey")
 ```{r, PAM Data Manipulation}
 PAM_average <- master_PAM %>% 
   group_by(Plate_Type, Group) %>% 
-  summarise(mean_PAM = mean(PAM))
+  summarise(mean_F0 = mean(F0))
 ```
 
 
@@ -175,12 +176,12 @@ PAM_average <- master_PAM %>%
 ```{r, PAM Data Boxplot}
 PAM_boxplot <- ggplot(PAM_average,
                       aes(x=Plate_Type,
-                          y=mean_PAM,
+                          y=mean_F0,
                           fill=Plate_Type))+
   geom_boxplot(show.legend = FALSE)+
-  labs(title = "Average PAM Readings Per Plate Type",
+  labs(title = "Average Florescence Readings Per Plate Type",
        x = "Cage Type",
-       y = "PAM Reading Average")+
+       y = "Average F0")+
   scale_fill_bmj()+
   theme_bw()
 PAM_boxplot
@@ -191,7 +192,8 @@ PAM_boxplot
 ```{r, PAM Data Boxplot}
 PAM_ave_per_plate <- master_PAM %>% 
   group_by(Plate_ID, Group) %>% 
-  summarise(PAM_average = mean(PAM))
+  summarise(PAM_average = mean(F0)) %>% 
+  mutate(log_F0 = log(PAM_average+1))
 
 Plate_line_plot <- ggplot(PAM_ave_per_plate,
                       aes(x=Plate_ID,
@@ -209,3 +211,26 @@ Plate_line_plot <- ggplot(PAM_ave_per_plate,
 Plate_line_plot
 
 ```
+
+#Statistics for PAM
+Statistical question: Are the mean florescence different between male and female cages
+```{r}
+#data manipulation for t test
+mal_fem_fo <- PAM_average %>% 
+  filter(Plate_Type!="Control") %>% #filtered out controls
+  mutate(var_F0 = var(mean_F0),
+         log_F0 = log(mean_F0+1)) #data was not normal, log transformed and added 1 since data had many 0's
+ggqqplot(mal_fem_fo$log_F0) #check for normality
+F0_ttest <- t.test(log_F0~Plate_Type, var.equal=TRUE, data = mal_fem_fo)
+F0_ttest
+
+F0_average <- master_PAM %>% 
+  group_by(Plate_Type, Group) %>% 
+  summarise(mean_F0 = mean(F0)) %>% 
+  mutate(log_F0 = log(mean_F0+1))
+F0_model <- lm(log_F0~Plate_Type, data = F0_average )
+anova(F0_model)
+summary(F0_model)
+
+```
+
