@@ -335,8 +335,16 @@ Jun_24_PAM_paired_graph <- PAM_average_6_24 %>%
 Jun_24_PAM_paired_graph
 ```
 
-#raw data
-```{r, raw data}
+#Chlorphyll raw data
+```{r, Chlorophyll raw data}
+chlorophyll_raw_ <- chl_abun %>% 
+  ggplot(aes(x = Plate, 
+             y = mean_ug_cm2))+
+  geom_line(color= "black",
+            group=1,
+            show.legend = FALSE)+
+  geom_point(aes(color = Plate_Type))
 
+chlorophyll_raw_
 ```
 
