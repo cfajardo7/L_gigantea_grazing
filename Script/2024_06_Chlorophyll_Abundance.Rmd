@@ -126,7 +126,7 @@ orig_only_fem_male <- orig_spec_chl_abun %>%
     Plate %in% c("F10", "M10") ~"10"))
 ```
 
-#Paired Graph
+#Chlorophyl Paired Graph
 ```{r, Paired Graph}
 orig_paired_graph <- orig_only_fem_male %>% 
   ggplot(aes(x = Plate_Type, 
@@ -166,15 +166,21 @@ emmeans(Mod_chl, list(pairwise~Plate_Type), adjust = "tukey")
 ```
 #PAM Data Manipulation For Plate Type
 ```{r, PAM Data Manipulation}
-PAM_average <- master_PAM %>% 
-  group_by(Plate_Type, Group) %>% 
+PAM_average_Jun_Nine <- master_PAM %>% 
+  filter(Date != "2024_06_24") %>% 
+  group_by(Plate_ID, Group, Plate_Type) %>% 
+  summarise(mean_F0 = mean(F0))
+
+PAM_average_Jun_24<- master_PAM %>% 
+  filter(Date == "2024_06_24") %>% 
+  group_by(Plate_ID, Group, Plate_Type) %>% 
   summarise(mean_F0 = mean(F0))
 ```
 
 
-#PAM Data Boxplot
+#PAM Data Boxplots
 ```{r, PAM Data Boxplot}
-PAM_boxplot <- ggplot(PAM_average,
+June_Nine_PAM_boxplot <- ggplot(PAM_average_Jun_Nine,
                       aes(x=Plate_Type,
                           y=mean_F0,
                           fill=Plate_Type))+
@@ -184,7 +190,19 @@ PAM_boxplot <- ggplot(PAM_average,
        y = "Average F0")+
   scale_fill_bmj()+
   theme_bw()
-PAM_boxplot
+June_Nine_PAM_boxplot
+
+June_24_PAM_boxplot<- ggplot(PAM_average_Jun_24,
+                      aes(x=Plate_Type,
+                          y=mean_F0,
+                          fill=Plate_Type))+
+  geom_boxplot(show.legend = FALSE)+
+  labs(title = "Average Florescence Readings Per Plate Type",
+       x = "Cage Type",
+       y = "Average F0")+
+  scale_fill_bmj()+
+  theme_bw()
+June_24_PAM_boxplot
 
 ```
 
@@ -216,7 +234,7 @@ Plate_line_plot
 Statistical question: Are the mean florescence different between male and female cages
 ```{r}
 #data manipulation for t test
-mal_fem_fo <- PAM_average %>% 
+mal_fem_fo <- PAM_average_Jun_24 %>% 
   filter(Plate_Type!="Control") %>% #filtered out controls
   mutate(var_F0 = var(mean_F0),
          log_F0 = log(mean_F0+1)) #data was not normal, log transformed and added 1 since data had many 0's
@@ -231,6 +249,95 @@ F0_average <- master_PAM %>%
 F0_model <- lm(log_F0~Plate_Type, data = F0_average )
 anova(F0_model)
 summary(F0_model)
+
+```
+
+#join PAM data and chlorophyll data
+This is a left join that was made before the addition of the June 9-10 data. Do I average out the F0 readings by date and then do the join?
+```{r, join PAM data and chlorophyll data}
+full_data_PAM_CH <- PAM_average %>% 
+  rename(Plate=Plate_ID) %>% 
+  mutate(Group=factor(Group)) %>% 
+  left_join(chl_abun)
+```
+#scatterplot of full data
+This was made with the joined data from above. Change as neccesary
+```{r, scatterplot of full data}
+scatter_full <- ggplot(full_data_PAM_CH,
+                       aes(x=mean_F0,
+                           y=mean_ug_cm2))+
+  geom_point()+
+  geom_smooth(method="lm") #regression line, add method = lm 
+scatter_full
+```
+
+#PAM Average Grouped Data By Date 
+```{r, PAM Average Grouped Data By Date}
+PAM_average_Jun_9 <- master_PAM %>% 
+  filter(Date != "2024_06_24",
+         Plate_Type != "Control") %>% 
+  group_by(Plate_Type, Group, Plate_ID) %>% 
+   mutate(Group = as.factor(Group)) %>% 
+  summarise(mean_F0 = mean(F0))
+
+Jun_Nine_PAM_paired_graph <- PAM_average_Jun_9 %>% 
+  ggplot(aes(x = Plate_Type, 
+             y = mean_F0)) +
+  stat_summary(aes(group = Group), 
+               fun = mean, 
+               geom = "path",
+               show.legend = FALSE) +
+  stat_summary(aes(color = Plate_ID), 
+               fun.data = mean_cl_boot,
+               show.legend = FALSE) +
+  stat_summary(aes(color = Group), 
+               fun = mean, 
+               geom = "point", 
+               size = 4,
+               show.legend = FALSE) +
+  geom_point(aes(color = Group),
+             show.legend = FALSE)+
+  labs(title = "Florescence of Paired Female and Male Cages",
+       x = "Cage Type",
+       y = "Average Florescence")+
+  theme_bw()
+
+Jun_Nine_PAM_paired_graph
+
+PAM_average_6_24 <- master_PAM %>% 
+  filter(Date == "2024_06_24",
+         Plate_Type != "Control") %>% 
+  group_by(Plate_Type, Group, Plate_ID) %>% 
+   mutate(Group = as.factor(Group)) %>% 
+  summarise(mean_F0 = mean(F0))
+
+Jun_24_PAM_paired_graph <- PAM_average_6_24 %>% 
+  ggplot(aes(x = Plate_Type, 
+             y = mean_F0)) +
+  stat_summary(aes(group = Group), 
+               fun = mean, 
+               geom = "path",
+               show.legend = FALSE) +
+  stat_summary(aes(color = Plate_ID), 
+               fun.data = mean_cl_boot,
+               show.legend = FALSE) +
+  stat_summary(aes(color = Group), 
+               fun = mean, 
+               geom = "point", 
+               size = 4,
+               show.legend = FALSE) +
+  geom_point(aes(color = Group),
+             show.legend = FALSE)+
+  labs(title = "Florescence of Paired Female and Male Cages",
+       x = "Cage Type",
+       y = "Average Florescence")+
+  theme_bw()
+
+Jun_24_PAM_paired_graph
+```
+
+#raw data
+```{r, raw data}
 
 ```
 
