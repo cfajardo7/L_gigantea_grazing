@@ -40,15 +40,115 @@ library(ggsci)
 library(Hmisc)
 library(ggpubr)
 library(moments)
+library(Matrix)
 ```
 
 #Read in CSV
 ```{r, Read in CSV}
 orig_spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet_orig.csv"))
 master_PAM <- read_csv(here("Data", "2024_Spring_PAM_Master.csv"))
-
+limpet_weight <- read_csv(here("Data", "2024_06_OL_W_SL_SW.csv"))
 
 ```
+#Normalize Floresence Data
+```{r, Normalize Floresence Data}
+PAM_normalized <- master_PAM %>% #named normalized data
+  group_by(Start_end, Plate_ID, Plate_Type, Group) %>% #grouped by start/end, Plate ID, and Group
+  summarise(F0_mean = mean(F0, na.rm = TRUE), #used summary so that I only have columns I grouped by and the new summarized data, mean of FO
+            F0_SD = sd(F0, na.rm = TRUE), #SD of FO
+            F0_kurtosis = kurtosis(F0, na.rm = TRUE)) %>% #kurtosis of FO
+  pivot_wider(values_from = c(F0_mean, F0_SD, F0_kurtosis),names_from = Start_end) %>% # pivot wider to get start and end mean, sd, and kurtosis next to each other
+  mutate(delta_F0_mean= F0_mean_End-F0_mean_Start, #this is to show algae gained from beginning to end. If negative number, algae was lost, if positive, algae was gained
+         delta_F0_SD = F0_SD_End-F0_SD_Start) %>% #this is to show this is to show variation of the mean in the algae gained
+  mutate(Group_control = case_when(Plate_ID %in% c("C1", "F1", "M1", "F2", "M2", "F3", "M3", "F4", "M4")~1, #this groups to control 1
+                                   Plate_ID %in% c("C2", "F5", "M5", "F6", "M6")~2, #this groups to control 2
+                                   Plate_ID %in% c("C3", "F7", "M7", "F8", "M8")~3, #this groups to control 3
+                                   Plate_ID %in% c("C4", "F9", "M9", "F10", "M10")~4)) %>% #this groups to control 4
+  mutate(Group_control = factor(Group_control), #this makes the group control a factor
+         Group = factor(Group)) %>% #this makes group a factor
+  ungroup() %>% #ungroup from grouping above
+  group_by(Group_control) %>% #now we will group by group control
+  mutate(delta_F0_mean_norm = delta_F0_mean-delta_F0_mean[Plate_Type=="Control"], #this normalizes the mean to the controls
+         delta_F0_SD_norm = delta_F0_SD-delta_F0_SD[Plate_Type=="Control"]) #this normalizes the sd to the controls
+```
+#PAM Normalized boxplots
+```{r, PAM Normalized boxplots}
+delta_FO_mean_box <- PAM_normalized %>% #this shows us changes in algae by plate type. Algae was gained in all cases
+  ggplot(aes(x = Plate_Type,
+             y = delta_F0_mean))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1)
+delta_FO_mean_box
+
+delta_FO_sd_box <- PAM_normalized %>% #this is to see if the data is getting more variable by plate
+  ggplot(aes(x = Plate_Type,
+             y = delta_F0_SD))+
+  geom_boxplot()+
+  geom_jitter(width =  0.1) 
+delta_FO_sd_box
+
+FO_mean_end_box <- PAM_normalized %>% #this is to see the FO mean at the end of the experiment
+  ggplot(aes(x= Plate_Type,
+             y = F0_mean_End))+
+  geom_boxplot()+
+  geom_jitter(width=0.1,
+              aes(color = Group_control)) #this is to color by control group
+FO_mean_end_box
+
+FO_SD_end_box <- PAM_normalized %>% #this is to see the FO SD at the end of the experiment to see variability around the mean
+  ggplot(aes(x= Plate_Type,
+             y = F0_SD_End))+
+  geom_boxplot()+
+  geom_jitter(width=0.1,
+              aes(color = Group_control)) #this is to color by control group
+FO_SD_end_box
+
+norm_by_sex_delta_FO_mean_box <- PAM_normalized %>% #this is to see normalized mean data by group by sex
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y= delta_F0_mean_norm))+
+  geom_boxplot()+
+  geom_jitter(aes(color = Group),
+              width = 0.1)
+norm_by_sex_delta_FO_mean_box 
+
+norm_by_sex_delta_FO_sd_box <- PAM_normalized %>% #this is to see normalized SD of mean data by group by sex
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y= delta_F0_SD_norm))+
+  geom_boxplot()+
+  geom_jitter(aes(color = Group),
+              width = 0.1)
+norm_by_sex_delta_FO_sd_box
+```
+
+#linear models for PAM normalized Data
+```{r, linear models for PAM normalized Data}
+###TTEST###
+by_sex_Norm_PAM <- PAM_normalized %>% 
+  filter(Plate_Type != "Control") %>% 
+  mutate(Plate_ID = factor(Plate_ID))
+ggqqplot(by_sex_Norm_PAM$delta_F0_mean_norm) 
+norm_FO_var <- var.test(delta_F0_mean_norm~Plate_Type, data = by_sex_Norm_PAM)
+norm_FO_var #no significant difference between variance p=0.2
+norm_F0_ttest <- t.test(delta_F0_mean_norm~Plate_Type, var.equal=TRUE, data = by_sex_Norm_PAM)
+norm_F0_ttest #normalized means are not significantly different from one another p=0.2557
+
+hist(by_sex_Norm_PAM$delta_F0_mean_norm) #data does not have normal distribution
+skewness(by_sex_Norm_PAM$delta_F0_mean_norm, na.rm = TRUE) #data ha negative skewness, will use "inverse"link if i use glm
+
+#by_sex_norm_lmer <- lmer(delta_F0_mean_norm~Plate_Type+(1|Plate_ID), data = by_sex_Norm_PAM) #Error: number of levels of each grouping factor must be < number of observations (problems: Plate_ID) i think this is happening because F9 and M7 are producing NA's in delta_F0_mean_norm but I don't know how to use na.rm=TRUE in the mutate function that makes delta_F0_mean_norm, maybe na.omit? But where in the function do I put it? I thought I needed to make Plate ID a factor so I did so. But that didn't help
+
+```
+
+#Joined PAM normalized data and Limpet Weight
+```{r, Joined PAM normalized data and Limpet Weight}
+factor_limpet_weight <- limpet_weight %>% 
+  mutate(Plate_ID = factor(Plate_ID),
+         Group = factor(Group))
+norm_PAM_weight <- inner_join(PAM_normalized, factor_limpet_weight)
+```
+
 
 #Spectophotometry Data Manipulation
 ```{r, Spectophotometry Data Manipulation}
@@ -63,6 +163,7 @@ chl_abun <- orig_spec_chl_abun %>%
   group_by(Plate, Group) %>% 
   summarise(mean_ug_cm2 = mean(ug_cm2 ),
             sd_ug_cm2 = sd(ug_cm2),
+            kurtosis_ug_cm2 = kurtosis(ug_cm2),
             se_ug_cm2 = sd(ug_cm2)/sqrt(n())) %>% 
   mutate(Group = as.factor(Group))%>% 
   mutate(Plate_Type = case_when(
@@ -71,6 +172,61 @@ chl_abun <- orig_spec_chl_abun %>%
     Plate %in% c("M1","M2","M3","M4","M5","M6","M8","M9","M10") ~ "Male",
     Plate %in% ("UK") ~ "Unknown"))
   
+```
+
+
+#Normalized Chlorophyll Data
+```{r, Normalized Chlorophyll Data}
+chl_normalized <- chl_abun %>% #called in df used to calculate chrorophyll abundance from raw data
+  group_by(Plate, Group, Plate_Type) %>% #grouped by Plate(Plate ID), Group, and plate type
+  filter(Plate != "UK") %>% #filtered out the unknown plate
+   mutate(Group_control = case_when(Plate %in% c("C1", "F1", "M1", "F2", "M2", "F3", "M3", "F4", "M4")~1, #this groups to control 1
+                                   Plate %in% c("C2", "F5", "M5", "F6", "M6")~2, #this groups to control 2
+                                   Plate %in% c("C3", "F7", "M7", "F8", "M8")~3, #this groups to control 3
+                                   Plate %in% c("C4", "F9", "M9", "F10", "M10")~4)) %>%  #this groups to control 4
+  mutate(Group_control = factor(Group_control), #this makes the group control a factor
+         Group = factor(Group)) %>% #this makes group a factor
+  ungroup() %>% #ungroup from grouping above
+  group_by(Group_control) %>% #now we will group by group control
+  mutate(norm_mean_ug2_cm = mean_ug_cm2[Plate_Type=="Control"], #this normalizes the mean to the controls
+         norm_sd_ug_cm2 = sd_ug_cm2[Plate_Type=="Control"]) #this normalizes the sd to the controls
+```
+
+#Normalized Chlorophyll Boxplots
+```{r, Normalized Chlorophyll Boxplots}
+mean_ug_cm2_box <- chl_normalized %>% #this shows us the mean of chlorophyll abundance by plate type
+  ggplot(aes(x= Plate_Type,
+             y = mean_ug_cm2))+
+  geom_boxplot()+
+  geom_jitter(width=0.1,
+              aes(color = Group_control)) #this is to color by control group
+mean_ug_cm2_box
+
+sd_ug_cm2_box <- chl_normalized %>% #this shows us the variance around the mean
+  ggplot(aes(x= Plate_Type,
+             y = sd_ug_cm2))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1,
+              aes(color = Group_control))
+sd_ug_cm2_box
+
+norm_mean_ug_cm2_by_sex_box <- chl_normalized %>% #this shows us the mean once it has been normalized to the appropriate control by plate
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y = norm_mean_ug2_cm))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1,
+              aes(color = Group)) #here we group by group 1-10 instead of the group_control since it has been normalized
+norm_mean_ug_cm2_by_sex_box
+
+norm_sd_ug_cm2_by_sex_box <- chl_normalized %>% #this shows use the variance around the mean that has been normalized
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y = norm_sd_ug_cm2))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1,
+              aes(color= Group)) #here we group by group 1-10 instead of the group_control since it has been normalized
+norm_sd_ug_cm2_by_sex_box
 ```
 
 
@@ -157,15 +313,19 @@ orig_paired_graph
 ```
 
 #General Linear Models
+Error in initializePtr() : 
+  function 'cholmod_factor_ldetA' not provided by package 'Matrix' 
 ```{r, General Linear Models}
-Mod_chl<-lmer(mean_ug_cm2~Plate_Type+(1|Group), data = orig_only_fem_male %>%
-                filter(Plate_Type %in% c("Male","Female")) ) # you are getting the singularity warning because you have two points without a pair
-anova(Mod_chl)
-summary(Mod_chl)
+
+#Mod_chl<-lmer(mean_ug_cm2~Plate_Type+(1|Group), data = orig_only_fem_male %>%
+               #filter(Plate_Type %in% c("Male","Female"))) 
+#anova(Mod_chl)
+#summary(Mod_chl)
 
 #post hoc test
-emmeans(Mod_chl, list(pairwise~Plate_Type), adjust = "tukey")
+#emmeans(Mod_chl, list(pairwise~Plate_Type), adjust = "tukey")
 ```
+
 #PAM Data Manipulation For Plate Type per date
 ```{r, PAM Data Manipulation}
 PAM_average_Jun_Nine <- master_PAM %>% 
@@ -264,6 +424,7 @@ This is a left join that was made before the addition of the June 9-10 data. Do 
   #mutate(Group=factor(Group)) %>% 
   #left_join(chl_abun)
 ```
+
 #scatterplot of full data
 This was made with the joined data from above. Change as neccesary
 ```{r, scatterplot of full data}
@@ -390,6 +551,7 @@ late_jun_raw<- PAM_sum_late_jun %>%
 
 late_jun_raw
 ```
+
 #Kurtosis
 For the chlorophyll data, do I look at the kurtosis of the raw absorbency at 665nm and 750nm or do I do the kurtosis for the mean chlorophyll concentration? Below I did it for th mean chlorophyll concentration. The same goes for the PAM data. Do I separate it by date? Do I look at the raw F0? The mean, the sum? Below I looked at the raw FO per date
 ```{r, Kurtosis}
@@ -409,6 +571,7 @@ late_jun <- master_PAM %>%
 late_jun_kurtosis <- kurtosis(late_jun$F0)
 late_jun_kurtosis #kurtosis is 8.34, not normal
 ```
+
 #Coefficient of Variant
 Below I did the CV for Chlorophyll abundance average and Florescence average
 ```{r, Coefficient of Variant}
