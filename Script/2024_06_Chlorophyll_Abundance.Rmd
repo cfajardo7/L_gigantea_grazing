@@ -124,29 +124,60 @@ norm_by_sex_delta_FO_sd_box
 
 #linear models for PAM normalized Data
 ```{r, linear models for PAM normalized Data}
-###TTEST###
+###TTEST### check_model
 by_sex_Norm_PAM <- PAM_normalized %>% 
   filter(Plate_Type != "Control") %>% 
-  mutate(Plate_ID = factor(Plate_ID))
+  mutate(Plate_ID = factor(Plate_ID)) %>% 
+  filter(Plate_ID != "F9") %>% 
+  filter(Plate_ID != "M7") %>% 
+  filter(Plate_ID != "F7") %>% 
+  filter(Plate_ID != "M9")
+
+
 ggqqplot(by_sex_Norm_PAM$delta_F0_mean_norm) 
-norm_FO_var <- var.test(delta_F0_mean_norm~Plate_Type, data = by_sex_Norm_PAM)
-norm_FO_var #no significant difference between variance p=0.2
+norm_F0_var <- var.test(delta_F0_mean_norm~Plate_Type, data = by_sex_Norm_PAM)
+norm_F0_var #no significant difference between variance p=0.2
 norm_F0_ttest <- t.test(delta_F0_mean_norm~Plate_Type, var.equal=TRUE, data = by_sex_Norm_PAM)
 norm_F0_ttest #normalized means are not significantly different from one another p=0.2557
+
 
 hist(by_sex_Norm_PAM$delta_F0_mean_norm) #data does not have normal distribution
 skewness(by_sex_Norm_PAM$delta_F0_mean_norm, na.rm = TRUE) #data ha negative skewness, will use "inverse"link if i use glm
 
-#by_sex_norm_lmer <- lmer(delta_F0_mean_norm~Plate_Type+(1|Plate_ID), data = by_sex_Norm_PAM) #Error: number of levels of each grouping factor must be < number of observations (problems: Plate_ID) i think this is happening because F9 and M7 are producing NA's in delta_F0_mean_norm but I don't know how to use na.rm=TRUE in the mutate function that makes delta_F0_mean_norm, maybe na.omit? But where in the function do I put it? I thought I needed to make Plate ID a factor so I did so. But that didn't help
-
+#by_sex_norm_lmer <- lmer(delta_F0_mean_norm~Plate_Type+(1|Plate_ID), data = by_sex_Norm_PAM) #Error: number of levels of each grouping factor must be < number of observations (problems: Plate_ID) i think this is happening because F9 and M7 are producing NA's in delta_F0_mean_norm but I don't know how to use na.rm=TRUE in the mutate function that makes delta_F0_mean_norm, maybe na.omit? But where in the function do I put it? I thought I needed to make Plate ID a factor so I did so. But that didn't help 
+#09/15 i filtered out plates that have NA, that didn't work. After reading error it says that the levels of the grouping factor needs to be less than the number of observations. In PAM_normalized the grouping factor is Group_control which has 4 levels which is less that observation, I'm not sure what this means
+table(by_sex_Norm_PAM$Plate_ID)
 ```
 
 #Joined PAM normalized data and Limpet Weight
 ```{r, Joined PAM normalized data and Limpet Weight}
 factor_limpet_weight <- limpet_weight %>% 
+  select(Plate_ID, M_F=`Male/Female`, Group, WW_g, SL) %>% 
   mutate(Plate_ID = factor(Plate_ID),
          Group = factor(Group))
-norm_PAM_weight <- inner_join(PAM_normalized, factor_limpet_weight)
+norm_PAM_weight <- full_join(PAM_normalized, factor_limpet_weight) %>% 
+  mutate(PAM_rate = delta_F0_mean_norm/(14*WW_g)) #change in microalgae growth per day (14 is 14 days between start PAm and end PAM) per biomass (wet weight)
+```
+
+
+#joined normalized PAM and limpet weight boxplots
+```{r, joined normalized PAM and limpet weight boxplots}
+norm_PAM_weight_box <- norm_PAM_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y=PAM_rate))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1,
+              aes(color=Group))
+norm_PAM_weight_box
+
+PAM_body_size_scatter <- norm_PAM_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= SL,
+             y = PAM_rate))+
+  geom_point(aes(color = Group))+
+  facet_wrap(~Plate_Type, scales = "free")
+PAM_body_size_scatter
 ```
 
 
@@ -188,8 +219,9 @@ chl_normalized <- chl_abun %>% #called in df used to calculate chrorophyll abund
          Group = factor(Group)) %>% #this makes group a factor
   ungroup() %>% #ungroup from grouping above
   group_by(Group_control) %>% #now we will group by group control
-  mutate(norm_mean_ug2_cm = mean_ug_cm2[Plate_Type=="Control"], #this normalizes the mean to the controls
-         norm_sd_ug_cm2 = sd_ug_cm2[Plate_Type=="Control"]) #this normalizes the sd to the controls
+  mutate(control_mean_ug_cm2 = mean_ug_cm2[Plate_Type=="Control"],
+         norm_mean_ug_cm2 = mean_ug_cm2-control_mean_ug_cm2) %>% #this normalizes the mean to the controls) 
+rename(Plate_ID=Plate)
 ```
 
 #Normalized Chlorophyll Boxplots
@@ -213,22 +245,50 @@ sd_ug_cm2_box
 norm_mean_ug_cm2_by_sex_box <- chl_normalized %>% #this shows us the mean once it has been normalized to the appropriate control by plate
   filter(Plate_Type != "Control") %>% 
   ggplot(aes(x= Plate_Type,
-             y = norm_mean_ug2_cm))+
+             y = norm_mean_ug_cm2))+
+  geom_hline(yintercept = 0, #this adds a horizontal line
+             lty = 2)+ #this makes the line dashed 1= solid line
   geom_boxplot()+
   geom_jitter(width = 0.1,
               aes(color = Group)) #here we group by group 1-10 instead of the group_control since it has been normalized
 norm_mean_ug_cm2_by_sex_box
 
-norm_sd_ug_cm2_by_sex_box <- chl_normalized %>% #this shows use the variance around the mean that has been normalized
-  filter(Plate_Type != "Control") %>% 
-  ggplot(aes(x= Plate_Type,
-             y = norm_sd_ug_cm2))+
-  geom_boxplot()+
-  geom_jitter(width = 0.1,
-              aes(color= Group)) #here we group by group 1-10 instead of the group_control since it has been normalized
-norm_sd_ug_cm2_by_sex_box
+#norm_sd_ug_cm2_by_sex_box <- chl_normalized %>% #this shows use the variance around the mean that has been normalized
+ # filter(Plate_Type != "Control") %>% 
+  #ggplot(aes(x= Plate_Type,
+   #          y = norm_sd_ug_cm2))+
+  #geom_boxplot()+
+  #geom_jitter(width = 0.1,
+   #           aes(color= Group)) #here we group by group 1-10 instead of the group_control since it has been normalized
+#norm_sd_ug_cm2_by_sex_box
 ```
 
+#joined normalized chl and limpet weight
+```{r}
+norm_chl_weight <- left_join(chl_normalized, factor_limpet_weight) %>%  
+  mutate(chl_rate = norm_mean_ug_cm2/(6.4*WW_g)) # change in chlorophyll per day (6.4 is 6.4 weeks plates were left out) per limpet biomass (wet weight)
+##change chl from micrograms to either mg or g or change days to week or take 45 out
+```
+
+#joined normalized chl and limpet weight boxplots
+```{r, joined normalized chl and limpet weight boxplots}
+norm_chl_weight_box <- norm_chl_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y=chl_rate))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1)
+norm_chl_weight_box
+
+
+chl_body_size_scatter <- norm_chl_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= SL,
+             y = chl_rate))+
+  geom_point(aes(color = Plate_Type))+
+  facet_wrap(~Plate_Type, scales = "free")
+chl_body_size_scatter
+```
 
 #Chl Concentration Boxplot
 ```{r, Chl Concentration Boxplot}
