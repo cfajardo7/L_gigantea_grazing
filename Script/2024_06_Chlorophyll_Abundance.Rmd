@@ -41,6 +41,8 @@ library(Hmisc)
 library(ggpubr)
 library(moments)
 library(Matrix)
+library(sjPlot)
+library(strengejacke)
 ```
 
 #Read in CSV
@@ -48,8 +50,10 @@ library(Matrix)
 orig_spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet_orig.csv"))
 master_PAM <- read_csv(here("Data", "2024_Spring_PAM_Master.csv"))
 limpet_weight <- read_csv(here("Data", "2024_06_OL_W_SL_SW.csv"))
+tide_height <- read_csv(here("Data", "2024_05_Tide_height.csv"))
 
 ```
+
 #Normalize Floresence Data
 ```{r, Normalize Floresence Data}
 PAM_normalized <- master_PAM %>% #named normalized data
@@ -144,12 +148,12 @@ norm_F0_ttest #normalized means are not significantly different from one another
 hist(by_sex_Norm_PAM$delta_F0_mean_norm) #data does not have normal distribution
 skewness(by_sex_Norm_PAM$delta_F0_mean_norm, na.rm = TRUE) #data ha negative skewness, will use "inverse"link if i use glm
 
-#by_sex_norm_lmer <- lmer(delta_F0_mean_norm~Plate_Type+(1|Plate_ID), data = by_sex_Norm_PAM) #Error: number of levels of each grouping factor must be < number of observations (problems: Plate_ID) i think this is happening because F9 and M7 are producing NA's in delta_F0_mean_norm but I don't know how to use na.rm=TRUE in the mutate function that makes delta_F0_mean_norm, maybe na.omit? But where in the function do I put it? I thought I needed to make Plate ID a factor so I did so. But that didn't help 
-#09/15 i filtered out plates that have NA, that didn't work. After reading error it says that the levels of the grouping factor needs to be less than the number of observations. In PAM_normalized the grouping factor is Group_control which has 4 levels which is less that observation, I'm not sure what this means
+by_sex_norm_lmer <- lmer(delta_F0_mean_norm~Plate_Type+(1|Group), data = by_sex_Norm_PAM) 
+check_model(by_sex_norm_lmer)
 table(by_sex_Norm_PAM$Plate_ID)
 ```
 
-#Joined PAM normalized data and Limpet Weight
+#Joined PAM normalized data and Limpet Weight and Tide Height
 ```{r, Joined PAM normalized data and Limpet Weight}
 factor_limpet_weight <- limpet_weight %>% 
   select(Plate_ID, M_F=`Male/Female`, Group, WW_g, SL) %>% 
@@ -157,6 +161,42 @@ factor_limpet_weight <- limpet_weight %>%
          Group = factor(Group))
 norm_PAM_weight <- full_join(PAM_normalized, factor_limpet_weight) %>% 
   mutate(PAM_rate = delta_F0_mean_norm/(14*WW_g)) #change in microalgae growth per day (14 is 14 days between start PAm and end PAM) per biomass (wet weight)
+factor_tide_height <- tide_height %>% 
+  mutate(Group = factor(Group)) %>% 
+  select(Plate_ID, Plate_Type, Group, Tide_height_avg)
+norm_PAM_weight_tide <- left_join(norm_PAM_weight, factor_tide_height)
+```
+#Hurdle Models
+```{r}
+PAM_zeros_ones <- norm_PAM_weight_tide %>% 
+   ungroup()%>% 
+  mutate(PAM_zeros = if_else(PAM_rate < 0, 1, 0))
+glmer_PAM_Zeros_ones <- glmer(PAM_zeros~Plate_Type+Tide_height_avg+(1|Group), family = "binomial", data = PAM_zeros_ones)
+summary(glmer_PAM_Zeros_ones)
+         
+```
+
+
+#Linear Models for Normalized PAm and Weight 
+```{r, Linear Models for Normalized PAm and Weight2}
+
+norm_PAM <- norm_PAM_weight %>% 
+  filter(Plate_Type != "Control",
+         !Group %in% c(7,9))
+pam_norm_lmer <- lmer(PAM_rate~Plate_Type+(1|Group), data = norm_PAM)
+anova(pam_norm_lmer)
+summary(pam_norm_lmer)
+check_model(pam_norm_lmer)
+
+tide_PAM <- norm_PAM_weight_tide %>% 
+  filter(Plate_Type != "Control",
+         !Group %in% c(2,7,9))
+pam_tide_lmer <- lmer(log(PAM_rate+10)~Plate_Type+Tide_height_avg+(1|Group), data = tide_PAM)
+anova(pam_tide_lmer)
+summary(pam_tide_lmer)
+check_model(pam_tide_lmer)
+ggsave(here("Output", "PAM_Tide_Check_Model.png"))
+#sjp.lmer(pam_tide_lmer, type= "pred")
 ```
 
 
@@ -268,7 +308,22 @@ norm_mean_ug_cm2_by_sex_box
 norm_chl_weight <- left_join(chl_normalized, factor_limpet_weight) %>%  
   mutate(chl_rate = norm_mean_ug_cm2/(6.4*WW_g)) # change in chlorophyll per day (6.4 is 6.4 weeks plates were left out) per limpet biomass (wet weight)
 ##change chl from micrograms to either mg or g or change days to week or take 45 out
+norm_chl_weight_tide <- left_join(norm_chl_weight, factor_tide_height)
 ```
+
+#Linear Models for Normalized Chla and Weight and Tide Height
+```{r, Linear Models for Normalized PAm and Weight}
+
+tide_chl <- norm_chl_weight_tide %>% 
+  filter(Plate_Type != "Control",
+         !Group %in% 2)
+chl_tide_lmer <- lmer(log(chl_rate+7)~Plate_Type+Tide_height_avg+(1|Group), data = tide_chl)
+anova(chl_tide_lmer)
+summary(chl_tide_lmer)
+check_model(chl_tide_lmer)
+ggsave(here("Output", "Chl_tide_Check_Model.png"))
+```
+
 
 #joined normalized chl and limpet weight boxplots
 ```{r, joined normalized chl and limpet weight boxplots}
