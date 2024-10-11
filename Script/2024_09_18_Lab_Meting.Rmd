@@ -1,0 +1,281 @@
+---
+title: "Silbiger Lab Meeting"
+author: "Cindy Fajardo"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.path = "../Output/")
+```
+
+## Data Analysis Thus Far
+
+I have and are continuing to analyze the data that I have been collecting since late September 2023.
+
+## Background
+I have collected different types of data for the chapters that I have been working on.
+
+- Chapter 1 Seasonal owl limpet growth, changes in population distribution per season, and seasonal changes in the local community in the presence/absence of a territorial owl limpet
+
+- Chapter 2 Differences in herbivory between female and male owl limpets. This was also going to have another layer of difference in warm and cool seasons, but due to unforeseen circumstances, this will only occur in the spring season.
+
+For the purpose of this lab meeting, I will only touch on chapter 2 data
+
+## Ecolgical and Biological Concepts
+The two broad ecological concepts I am focusing in my second chapter are herbivory and energy processing i.e metabolism
+
+- Owl limpets are veracious herbivores of microalgae but also help maintain a garden of microalgae as the females "farm/garden" microalgae. Changes in herbivory between males and females have been tested in the lab, but not in th field. Because farming behavior has only been observed in females, it would be interesting to see if the results from lab studies can be observed in the environment. 
+
+- Metabolism is a linear concept, with smaller organisms having a faster metabolism. It would be interesting to see if there is a difference in metabolism in male and female owl limpets as the larger limpets are female and are large in comparison to the males.
+
+## Methods used
+For my grazing experiment I used ceramic plates that had 16 wax discs installed into the plates. The plates were then enclosed by a stainless steel cages. There was a total of 24 cages (10 males, 10 females, 4 controls) that were installed in the intertidal and left out for 45 days to collect microalgae. Before placing the limpets inside the cages, I used PAM fluorometry to capture the abundance of chlorophyll by collecting F0, or chlorophyll florescence as a proxy. I did the same when collecting the cages. In the lab, I extracted the chlorophyll from the plates and used spectrophotometry to check for the abundance of chlorophyll.
+
+## Data Analysis
+
+#Libraries
+```{r, Libraries}
+library("rerddap")
+library(tidyverse)
+library("tidync")
+library("doParallel")
+library(lubridate)
+library(patchwork)
+library(viridis)
+library(here)
+library(kableExtra)
+library(hrbrthemes)
+library(emmeans)
+library(agricolae)
+library(vegan)
+library(performance)
+library(broom)
+library(car)
+library(lme4)
+library(lmerTest)
+library(pscl)
+library(ggridges)
+library(devtools)
+library(gcookbook)
+library(ggsci)
+library(Hmisc)
+library(ggpubr)
+library(moments)
+library(Matrix)
+```
+
+#Read in CSV
+```{r, Read in CSV}
+orig_spec_chl_abun <- read_csv(here("Data","Chlorophyll_absorbance_data_sheet_orig.csv"))
+master_PAM <- read_csv(here("Data", "2024_Spring_PAM_Master.csv"))
+limpet_weight <- read_csv(here("Data", "2024_06_OL_W_SL_SW.csv"))
+
+```
+
+#Normalize Floresence Data
+```{r, Normalize Floresence Data}
+PAM_normalized <- master_PAM %>% #named normalized data
+  group_by(Start_end, Plate_ID, Plate_Type, Group) %>% #grouped by start/end, Plate ID, and Group
+  summarise(F0_mean = mean(F0, na.rm = TRUE), #used summary so that I only have columns I grouped by and the new summarized data, mean of FO
+            F0_SD = sd(F0, na.rm = TRUE), #SD of FO
+            F0_kurtosis = kurtosis(F0, na.rm = TRUE)) %>% #kurtosis of FO
+  pivot_wider(values_from = c(F0_mean, F0_SD, F0_kurtosis),names_from = Start_end) %>% # pivot wider to get start and end mean, sd, and kurtosis next to each other
+  mutate(delta_F0_mean= F0_mean_End-F0_mean_Start, #this is to show algae gained from beginning to end. If negative number, algae was lost, if positive, algae was gained
+         delta_F0_SD = F0_SD_End-F0_SD_Start) %>% #this is to show this is to show variation of the mean in the algae gained
+  mutate(Group_control = case_when(Plate_ID %in% c("C1", "F1", "M1", "F2", "M2", "F3", "M3", "F4", "M4")~1, #this groups to control 1
+                                   Plate_ID %in% c("C2", "F5", "M5", "F6", "M6")~2, #this groups to control 2
+                                   Plate_ID %in% c("C3", "F7", "M7", "F8", "M8")~3, #this groups to control 3
+                                   Plate_ID %in% c("C4", "F9", "M9", "F10", "M10")~4)) %>% #this groups to control 4
+  mutate(Group_control = factor(Group_control), #this makes the group control a factor
+         Group = factor(Group)) %>% #this makes group a factor
+  ungroup() %>% #ungroup from grouping above
+  group_by(Group_control) %>% #now we will group by group control
+  mutate(delta_F0_mean_norm = delta_F0_mean-delta_F0_mean[Plate_Type=="Control"], #this normalizes the mean to the controls
+         delta_F0_SD_norm = delta_F0_SD-delta_F0_SD[Plate_Type=="Control"]) #this normalizes the sd to the controls
+```
+
+#PAM Normalized boxplots
+```{r, PAM Normalized boxplots}
+delta_FO_mean_box <- PAM_normalized %>% #this shows us changes in algae by plate type. Algae was gained in all cases
+  ggplot(aes(x = Plate_Type,
+             y = delta_F0_mean))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1)
+delta_FO_mean_box
+
+delta_FO_sd_box <- PAM_normalized %>% #this is to see if the data is getting more variable by plate
+  ggplot(aes(x = Plate_Type,
+             y = delta_F0_SD))+
+  geom_boxplot()+
+  geom_jitter(width =  0.1) 
+delta_FO_sd_box
+
+FO_mean_end_box <- PAM_normalized %>% #this is to see the FO mean at the end of the experiment
+  ggplot(aes(x= Plate_Type,
+             y = F0_mean_End))+
+  geom_boxplot()+
+  geom_jitter(width=0.1,
+              aes(color = Group_control)) #this is to color by control group
+FO_mean_end_box
+
+FO_SD_end_box <- PAM_normalized %>% #this is to see the FO SD at the end of the experiment to see variability around the mean
+  ggplot(aes(x= Plate_Type,
+             y = F0_SD_End))+
+  geom_boxplot()+
+  geom_jitter(width=0.1,
+              aes(color = Group_control)) #this is to color by control group
+FO_SD_end_box
+
+norm_by_sex_delta_FO_mean_box <- PAM_normalized %>% #this is to see normalized mean data by group by sex
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y= delta_F0_mean_norm))+
+  geom_boxplot()+
+  geom_jitter(aes(color = Group),
+              width = 0.1)
+norm_by_sex_delta_FO_mean_box 
+
+norm_by_sex_delta_FO_sd_box <- PAM_normalized %>% #this is to see normalized SD of mean data by group by sex
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y= delta_F0_SD_norm))+
+  geom_boxplot()+
+  geom_jitter(aes(color = Group),
+              width = 0.1)
+norm_by_sex_delta_FO_sd_box
+```
+
+#Joined PAM normalized data and Limpet Weight
+```{r, Joined PAM normalized data and Limpet Weight}
+factor_limpet_weight <- limpet_weight %>% 
+  select(Plate_ID, M_F=`Male/Female`, Group, WW_g, SL) %>% 
+  mutate(Plate_ID = factor(Plate_ID),
+         Group = factor(Group))
+norm_PAM_weight <- full_join(PAM_normalized, factor_limpet_weight) %>% 
+  mutate(PAM_rate = delta_F0_mean_norm/(14*WW_g)) #change in microalgae growth per day (14 is 14 days between start PAm and end PAM) per biomass (wet weight)
+```
+
+#joined normalized PAM and limpet weight boxplots
+```{r, joined normalized PAM and limpet weight boxplots}
+norm_PAM_weight_box <- norm_PAM_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y=PAM_rate))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1,
+              aes(color=Group))
+norm_PAM_weight_box
+
+PAM_body_size_scatter <- norm_PAM_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= SL,
+             y = PAM_rate))+
+  geom_point(aes(color = Group))+
+  facet_wrap(~Plate_Type, scales = "free")
+PAM_body_size_scatter
+```
+
+#Spectophotometry Data Manipulation
+```{r, Spectophotometry Data Manipulation}
+chl_abun <- orig_spec_chl_abun %>%
+  separate(col = Plate_ID,
+           into = c("Plate", "ID"),
+           sep = "_") %>%
+  mutate(Path_length_cm = Path_lenght_mm/10) %>% 
+  mutate(ug_ml = ((Abun_665-Abun_750)/Path_length_cm),
+         ug = ug_ml *Metha_vol,
+         ug_cm2 = ug/SA_cm_2) %>% 
+  group_by(Plate, Group) %>% 
+  summarise(mean_ug_cm2 = mean(ug_cm2 ),
+            sd_ug_cm2 = sd(ug_cm2),
+            kurtosis_ug_cm2 = kurtosis(ug_cm2),
+            se_ug_cm2 = sd(ug_cm2)/sqrt(n())) %>% 
+  mutate(Group = as.factor(Group))%>% 
+  mutate(Plate_Type = case_when(
+    Plate %in% c("C1","C2","C3","C4") ~ "Control",
+    Plate %in% c("F1","F2","F3","F4","F6","F7","F8","F10","F5") ~ "Female",
+    Plate %in% c("M1","M2","M3","M4","M5","M6","M8","M9","M10") ~ "Male",
+    Plate %in% ("UK") ~ "Unknown"))
+  
+```
+
+#Normalized Chlorophyll Data
+```{r, Normalized Chlorophyll Data}
+chl_normalized <- chl_abun %>% #called in df used to calculate chrorophyll abundance from raw data
+  group_by(Plate, Group, Plate_Type) %>% #grouped by Plate(Plate ID), Group, and plate type
+  filter(Plate != "UK") %>% #filtered out the unknown plate
+   mutate(Group_control = case_when(Plate %in% c("C1", "F1", "M1", "F2", "M2", "F3", "M3", "F4", "M4")~1, #this groups to control 1
+                                   Plate %in% c("C2", "F5", "M5", "F6", "M6")~2, #this groups to control 2
+                                   Plate %in% c("C3", "F7", "M7", "F8", "M8")~3, #this groups to control 3
+                                   Plate %in% c("C4", "F9", "M9", "F10", "M10")~4)) %>%  #this groups to control 4
+  mutate(Group_control = factor(Group_control), #this makes the group control a factor
+         Group = factor(Group)) %>% #this makes group a factor
+  ungroup() %>% #ungroup from grouping above
+  group_by(Group_control) %>% #now we will group by group control
+  mutate(control_mean_ug_cm2 = mean_ug_cm2[Plate_Type=="Control"],
+         norm_mean_ug_cm2 = mean_ug_cm2-control_mean_ug_cm2) %>% #this normalizes the mean to the controls) 
+rename(Plate_ID=Plate)
+```
+
+#Normalized Chlorophyll Boxplots
+```{r, Normalized Chlorophyll Boxplots}
+mean_ug_cm2_box <- chl_normalized %>% #this shows us the mean of chlorophyll abundance by plate type
+  ggplot(aes(x= Plate_Type,
+             y = mean_ug_cm2))+
+  geom_boxplot()+
+  geom_jitter(width=0.1,
+              aes(color = Group_control)) #this is to color by control group
+mean_ug_cm2_box
+
+sd_ug_cm2_box <- chl_normalized %>% #this shows us the variance around the mean
+  ggplot(aes(x= Plate_Type,
+             y = sd_ug_cm2))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1,
+              aes(color = Group_control))
+sd_ug_cm2_box
+
+norm_mean_ug_cm2_by_sex_box <- chl_normalized %>% #this shows us the mean once it has been normalized to the appropriate control by plate
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y = norm_mean_ug_cm2))+
+  geom_hline(yintercept = 0, #this adds a horizontal line
+             lty = 2)+ #this makes the line dashed 1= solid line
+  geom_boxplot()+
+  geom_jitter(width = 0.1,
+              aes(color = Group)) #here we group by group 1-10 instead of the group_control since it has been normalized
+norm_mean_ug_cm2_by_sex_box
+
+```
+
+#joined normalized chl and limpet weight
+```{r}
+norm_chl_weight <- left_join(chl_normalized, factor_limpet_weight) %>%  
+  mutate(chl_rate = norm_mean_ug_cm2/(6.4*WW_g)) # change in chlorophyll per day (6.4 is 6.4 weeks plates were left out) per limpet biomass (wet weight)
+##change chl from micrograms to either mg or g or change days to week or take 45 out
+```
+
+#joined normalized chl and limpet weight boxplots
+```{r, joined normalized chl and limpet weight boxplots}
+norm_chl_weight_box <- norm_chl_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= Plate_Type,
+             y=chl_rate))+
+  geom_boxplot()+
+  geom_jitter(width = 0.1)
+norm_chl_weight_box
+
+
+chl_body_size_scatter <- norm_chl_weight %>% 
+  filter(Plate_Type != "Control") %>% 
+  ggplot(aes(x= SL,
+             y = chl_rate))+
+  geom_point(aes(color = Plate_Type))+
+  facet_wrap(~Plate_Type, scales = "free")
+chl_body_size_scatter
+```
